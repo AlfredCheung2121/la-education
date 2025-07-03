@@ -1,0 +1,148 @@
+---
+title: "LA Education"
+Author: Alfred Cheung
+execute: 
+  echo: false
+  message: false
+  warning: false
+---
+
+
+```{r}
+#| message: false
+library(tidycensus)
+library(tidyverse)
+library(sf)
+library(viridis)
+library(leaflet)
+
+```
+
+
+
+```{r}
+edu_vars <- c(
+  total = "B15003_001",
+  bachelors = "B15003_022",
+  masters = "B15003_023",
+  professional = "B15003_024",
+  doctorate = "B15003_025"
+)
+
+edu_la <- get_acs(
+  geography = "tract",
+  state = "CA",
+  county = "Los Angeles",
+  variables = edu_vars,
+  year = 2022,
+  survey = "acs5",
+  geometry = TRUE
+)
+```
+
+
+
+
+
+
+
+
+```{r}
+edu_wide <- edu_la %>%
+  select(GEOID, NAME, variable, estimate, geometry) %>%
+  pivot_wider(names_from = variable, values_from = estimate) %>%
+  mutate(
+    ba_or_higher = bachelors + masters + professional + doctorate,
+    pct_ba_or_higher = 100 * ba_or_higher / total)
+
+
+```
+
+
+```{r}
+# Define a color palette
+pal <- colorNumeric(
+  palette = "YlGnBu",
+  domain = edu_wide$pct_ba_or_higher,
+  na.color = "transparent"
+)
+
+# Create leaflet map
+leaflet(data = edu_wide) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(
+    fillColor = ~pal(pct_ba_or_higher),
+    color = "white",
+    weight = 0.5,
+    opacity = 1,
+    fillOpacity = 0.7,
+    label = ~paste0(
+      NAME, "<br>",
+      "BA+ %: ", round(pct_ba_or_higher, 1), "%"
+    ),
+    highlightOptions = highlightOptions(
+      weight = 2,
+      color = "#666",
+      fillOpacity = 0.9,
+      bringToFront = TRUE
+    )
+  ) %>%
+  addLegend(
+    pal = pal,
+    values = ~pct_ba_or_higher,
+    opacity = 0.7,
+    title = "% BA or Higher",
+    position = "bottomright"
+  )
+
+```
+
+
+
+```{r}
+pal <- colorBin(
+  palette = "YlOrRd",
+  domain = edu_wide$pct_ba_or_higher,
+  bins = c(0, 20, 30, 40, 50, 60, 70, 100),
+  na.color = "transparent"
+)
+edu_wide <- edu_wide %>%
+  mutate(
+    popup_text = paste0(
+      "<strong>", NAME, "</strong><br/>",
+      "BA+ %: ", round(pct_ba_or_higher, 1), "%<br/>",
+      "Total pop 25+: ", scales::comma(total), "<br/>",
+      "BA+: ", scales::comma(ba_or_higher)
+    )
+  )
+```
+
+
+```{r}
+leaflet(edu_wide) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(
+    fillColor = ~pal(pct_ba_or_higher),
+    color = "#ffffff",
+    weight = 0.4,
+    fillOpacity = 0.8,
+    popup = ~popup_text,
+    highlightOptions = highlightOptions(
+      color = "#444",
+      weight = 1.5,
+      bringToFront = TRUE,
+      fillOpacity = 0.9
+    )
+  ) %>%
+  addLegend(
+    pal = pal,
+    values = ~pct_ba_or_higher,
+    title = "% with BA or Higher",
+    position = "bottomright",
+    opacity = 0.8
+  )
+```
+
+
+
+This interactive map displays the percentage of adults aged 25 and over with a bachelor’s degree or higher across census tracts in Los Angeles County. The visualization reveals stark geographic disparities, with higher educational attainment concentrated in coastal and central urban neighborhoods, while lower levels are more common in southern and eastern regions.
